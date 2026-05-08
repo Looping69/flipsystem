@@ -42,7 +42,7 @@ export const assetBooks: FlipbookItem[] = [
   {
     id: "aureus-magazine",
     title: "Aureus Magazine",
-    description: "Magazine assembled from every supported file in the local assets folder.",
+    description: "Aureus pages ready to review, arrange, and present.",
     contentKind: "magazine",
     pages: assetPages,
     pageCount: assetPages.length,

@@ -12,8 +12,10 @@ import {
   Loader2
 } from "lucide-react";
 import { formatBytes, getContentLabel } from "../content";
+import { resolvePageLayout } from "../pageLayouts";
 import { getDocument } from "../pdf";
 import type { ContentPage, FlipbookItem } from "../types";
+import { PageDesignEditor } from "./PageDesignEditor";
 
 const PageFlipBook = HTMLFlipBook as unknown as React.ComponentType<Record<string, unknown>>;
 
@@ -98,7 +100,7 @@ const CoverPage = React.forwardRef<HTMLDivElement, CoverProps>(function CoverPag
     <div ref={ref} className={`flip-cover ${isBack ? "flip-cover-back" : ""}`}>
       <div className="flip-cover-overlay" />
       <div className="flip-cover-content">
-        <p className="flip-cover-label">Standalone Flip System</p>
+        <p className="flip-cover-label">Aureus Magazine</p>
         <h2>{title}</h2>
         {subtitle ? <p className="flip-cover-subtitle">{subtitle}</p> : null}
       </div>
@@ -288,14 +290,28 @@ const PageContentPreview = React.forwardRef<HTMLDivElement, PageContentPreviewPr
   { page },
   ref
 ) {
+  const layout = resolvePageLayout(page);
   const pageLabel = getContentLabel(page.contentKind);
-  const isFullPageMedia = page.contentKind === "image" || page.contentKind === "video";
+  const isMediaPage = page.contentKind === "image" || page.contentKind === "video";
+  const isQuoteLayout = layout.preset === "quote";
+  const isCoverLayout = layout.preset === "cover";
+  const isSplitLayout = layout.preset === "split";
+  const isSpotlightLayout = layout.preset === "spotlight";
+  const isStackLayout = layout.preset === "stack";
+  const isFullPageMedia = isMediaPage && (isCoverLayout || isSpotlightLayout);
+  const themeClass = `page-theme-${layout.theme}`;
 
   return (
-    <div ref={ref} className={`flip-page ${isFullPageMedia ? "asset-cover-page" : ""}`}>
-      <div className="flip-page-frame mixed-page-frame">
-        {isFullPageMedia ? (
-          <>
+    <div ref={ref} className={`flip-page ${themeClass} ${isFullPageMedia ? "asset-cover-page" : ""}`}>
+      <div className={`flip-page-frame mixed-page-frame layout-${layout.preset}`}>
+        <div className={`mixed-page-layout ${themeClass} ${isSplitLayout ? "is-split" : ""} ${isSpotlightLayout ? "is-spotlight" : ""} ${isStackLayout ? "is-stack" : ""} ${isQuoteLayout ? "is-quote" : ""}`}>
+          <div className="mixed-page-copy">
+            <span className="mixed-page-kicker">{layout.kicker}</span>
+            <h3>{layout.headline}</h3>
+            {layout.body ? <p className="mixed-page-body">{layout.body}</p> : null}
+          </div>
+
+          <div className="mixed-page-asset">
             {page.contentKind === "image" ? (
               <img className="mixed-image" src={page.contentUrl} alt={`${pageLabel} page`} />
             ) : null}
@@ -303,9 +319,7 @@ const PageContentPreview = React.forwardRef<HTMLDivElement, PageContentPreviewPr
             {page.contentKind === "video" ? (
               <video className="mixed-video" src={page.contentUrl} controls playsInline />
             ) : null}
-          </>
-        ) : (
-          <div className="mixed-page-content">
+
             {page.contentKind === "audio" ? <audio className="mixed-audio" src={page.contentUrl} controls /> : null}
 
             {page.contentKind === "text" ? <TextPreview contentUrl={page.contentUrl} /> : null}
@@ -318,9 +332,9 @@ const PageContentPreview = React.forwardRef<HTMLDivElement, PageContentPreviewPr
               </div>
             ) : null}
           </div>
-        )}
+        </div>
       </div>
-      {!isFullPageMedia ? <div className="flip-page-number">{pageLabel}</div> : null}
+      <div className="flip-page-number">{pageLabel}</div>
     </div>
   );
 });
@@ -330,9 +344,14 @@ type FlipbookViewerProps = {
   onBack?: () => void;
   onLoaded?: (pageCount: number) => void;
   variant?: "dashboard" | "presentation";
+  editor?: {
+    selectedPageId: string;
+    onSelectPage: (pageId: string) => void;
+    onUpdatePage: (pageId: string, updater: (page: ContentPage) => ContentPage) => void;
+  };
 };
 
-export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard" }: FlipbookViewerProps) {
+export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", editor }: FlipbookViewerProps) {
   const [loadedPdfSources, setLoadedPdfSources] = useState<LoadedPdfSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -349,6 +368,10 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard" }
   const isPresentation = variant === "presentation";
 
   const magazinePages = useMemo(() => (isMagazine ? book.pages ?? [] : []), [book.pages, isMagazine]);
+  const selectedEditorPage = useMemo(
+    () => (editor?.selectedPageId ? magazinePages.find((page) => page.id === editor.selectedPageId) ?? null : null),
+    [editor?.selectedPageId, magazinePages]
+  );
 
   const pdfSources = useMemo<PdfSource[]>(() => {
     if (isPdf && book.contentUrl) {
@@ -553,11 +576,11 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard" }
       <CoverPage
         key="front-cover"
         title={book.title}
-        subtitle={isMagazine ? "Complete Asset Magazine" : "Interactive Catalogue"}
+        subtitle={isMagazine ? "Ready to present" : "Ready to view"}
         coverImage={book.coverImageUrl}
       />,
       ...pages,
-      <CoverPage key="back-cover" title="End of Preview" subtitle="Standalone Flip System" isBack />
+      <CoverPage key="back-cover" title="End" subtitle="Aureus Magazine" isBack />
     ];
   }, [book.coverImageUrl, book.title, isMagazine, layout.pageHeight, layout.pageWidth, renderablePages]);
 
@@ -604,7 +627,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard" }
       {!isPresentation ? <header className="viewer-header">
         <div>
           <h2>{book.title}</h2>
-          <p>{book.description || "Interactive content item"}</p>
+          <p>{book.description || "Ready to review."}</p>
         </div>
         <div className="viewer-meta">
           <span>{isFlipbook ? `${totalPages || "--"} pages` : getContentLabel(book.contentKind)}</span>
@@ -612,7 +635,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard" }
         </div>
       </header> : null}
 
-      {isFlipbook && loading ? (
+      {isFlipbook && loading && !editor ? (
         <div className="viewer-message">
           <Loader2 className="spin" size={18} />
           <span>Loading magazine...</span>
@@ -623,7 +646,32 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard" }
 
       {!isFlipbook && !error ? <NativeContentPreview book={book} /> : null}
 
-      {isFlipbook && !loading && !error && renderablePages.length > 0 ? (
+      {editor && isMagazine && selectedEditorPage && selectedEditorPage.contentKind !== "pdf" ? (
+        <div className="flipbook-shell editor-preview-shell">
+          <PageDesignEditor page={selectedEditorPage} onUpdatePage={editor.onUpdatePage} />
+          <div className="page-jump-list" aria-label="Magazine pages">
+            {magazinePages.map((page, index) => (
+              <button
+                key={`editor-jump-${page.id}`}
+                type="button"
+                className={`page-jump ${editor.selectedPageId === page.id ? "active" : ""}`}
+                onClick={() => editor.onSelectPage(page.id)}
+              >
+                <span>Page {index + 1}</span>
+                <small>{getContentLabel(page.contentKind)}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {editor && isMagazine && selectedEditorPage?.contentKind === "pdf" ? (
+        <div className="viewer-message editor-viewer-note">
+          <span>PDF pages keep their document layout. Choose a non-PDF page to place draggable blocks and linked overlays.</span>
+        </div>
+      ) : null}
+
+      {!editor && isFlipbook && !loading && !error && renderablePages.length > 0 ? (
         <div className="flipbook-shell">
           <div className="flipbook-stage">
             <PageFlipBook

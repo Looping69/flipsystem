@@ -1,120 +1,125 @@
 import React, { useRef } from "react";
 import { ArrowDown, ArrowUp, ImagePlus, Save, Trash2, X } from "lucide-react";
 import { getContentLabel } from "../content";
-import type { FlipbookItem, ContentPage } from "../types";
+import { PAGE_LAYOUT_PRESETS, PAGE_LAYOUT_THEMES } from "../pageLayouts";
+import type { ContentPage, FlipbookItem, PageLayoutConfig } from "../types";
 
 type MagazineEditorProps = {
   book: FlipbookItem;
-  onSave: (updatedBook: FlipbookItem) => void;
+  selectedPageId: string;
+  onSelectPage: (pageId: string) => void;
+  onChange: (updatedBook: FlipbookItem) => void;
+  onSave: () => void;
   onClose: () => void;
 };
 
-export function MagazineEditor({ book, onSave, onClose }: MagazineEditorProps) {
-  const [title, setTitle] = React.useState(book.title);
-  const [description, setDescription] = React.useState(book.description);
-  const [coverImageUrl, setCoverImageUrl] = React.useState(book.coverImageUrl || "");
-  const [pages, setPages] = React.useState<ContentPage[]>(book.pages || []);
+export function MagazineEditor({ book, selectedPageId, onSelectPage, onChange, onSave, onClose }: MagazineEditorProps) {
   const coverUploadRef = useRef<HTMLInputElement>(null);
-  const uploadedCoverUrlRef = useRef<string | null>(null);
+  const selectedPage = book.pages?.find((page) => page.id === selectedPageId) ?? null;
+  const imagePages = (book.pages ?? []).filter((page) => page.contentKind === "image");
+  const isCustomUpload = Boolean(book.coverImageUrl) && !imagePages.some((page) => page.contentUrl === book.coverImageUrl);
 
-  const handleSave = () => {
-    onSave({
-      ...book,
-      title,
-      description,
-      coverImageUrl: coverImageUrl || undefined,
-      pages,
-    });
-    onClose();
+  const updateBook = (patch: Partial<FlipbookItem>) => onChange({ ...book, ...patch });
+
+  const updatePages = (updater: (pages: ContentPage[]) => ContentPage[]) => {
+    updateBook({ pages: updater([...(book.pages ?? [])]) });
   };
 
-  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !file.type.startsWith("image/")) return;
+  const updatePage = (pageId: string, updater: (page: ContentPage) => ContentPage) => {
+    updatePages((pages) => pages.map((page) => (page.id === pageId ? updater(page) : page)));
+  };
 
-    // Revoke old uploaded URL if exists
-    if (uploadedCoverUrlRef.current) {
-      URL.revokeObjectURL(uploadedCoverUrlRef.current);
+  const updatePageLayout = (pageId: string, patch: Partial<PageLayoutConfig>) => {
+    updatePage(pageId, (page) => ({
+      ...page,
+      layout: {
+        preset: page.layout?.preset ?? "auto",
+        theme: page.layout?.theme ?? "cool",
+        kicker: page.layout?.kicker ?? "",
+        headline: page.layout?.headline ?? "",
+        body: page.layout?.body ?? "",
+        ...patch
+      }
+    }));
+  };
+
+  const movePage = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= (book.pages?.length ?? 0)) {
+      return;
     }
 
-    const url = URL.createObjectURL(file);
-    uploadedCoverUrlRef.current = url;
-    setCoverImageUrl(url);
+    updatePages((pages) => {
+      const next = [...pages];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   };
 
-  const movePageUp = (index: number) => {
-    if (index === 0) return;
-    const next = [...pages];
-    [next[index - 1], next[index]] = [next[index], next[index - 1]];
-    setPages(next);
+  const removePage = (pageId: string) => {
+    updatePages((pages) => {
+      const remaining = pages.filter((page) => page.id !== pageId);
+      if (selectedPageId === pageId) {
+        onSelectPage(remaining[0]?.id ?? "");
+      }
+      return remaining;
+    });
   };
 
-  const movePageDown = (index: number) => {
-    if (index === pages.length - 1) return;
-    const next = [...pages];
-    [next[index], next[index + 1]] = [next[index + 1], next[index]];
-    setPages(next);
-  };
+  const handleCoverUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !file.type.startsWith("image/")) {
+      return;
+    }
 
-  const removePage = (id: string) => {
-    setPages(pages.filter((p) => p.id !== id));
+    updateBook({ coverImageUrl: URL.createObjectURL(file) });
   };
-
-  // All image pages can serve as cover options
-  const imagePages = pages.filter((p) => p.contentKind === "image");
-  // Check if the current cover is a custom upload (not from any image page)
-  const isCustomUpload = coverImageUrl && !imagePages.some((p) => p.contentUrl === coverImageUrl);
 
   return (
     <div className="magazine-editor-panel">
       <div className="editor-header">
-        <h3>Edit Magazine</h3>
+        <div>
+          <h3>Edit Magazine</h3>
+          <p className="editor-hint">The live page tools are in the preview above. Use this panel for structure and metadata.</p>
+        </div>
         <button type="button" className="close-btn" onClick={onClose}>
           <X size={18} />
         </button>
       </div>
 
-      {/* --- Front Cover Section --- */}
       <div className="editor-section">
         <label>Front Cover</label>
-        <p className="editor-hint">Choose an image from your magazine pages, upload a custom cover, or use the default.</p>
+        <p className="editor-hint">Choose an image from the issue, upload a custom cover, or leave it on the default cover.</p>
 
-        {/* Current cover preview */}
         <div className="cover-preview-large">
-          {coverImageUrl ? (
-            <img src={coverImageUrl} alt="Selected cover" />
+          {book.coverImageUrl ? (
+            <img src={book.coverImageUrl} alt="Selected cover" />
           ) : (
             <div className="cover-preview-default">
               <span className="cover-preview-default-label">Default Cover</span>
-              <span className="cover-preview-default-title">{title}</span>
+              <span className="cover-preview-default-title">{book.title}</span>
             </div>
           )}
         </div>
 
-        {/* Cover options */}
         <div className="cover-selector">
-          <button
-            type="button"
-            className={`cover-option ${!coverImageUrl ? "active" : ""}`}
-            onClick={() => setCoverImageUrl("")}
-          >
+          <button type="button" className={`cover-option ${!book.coverImageUrl ? "active" : ""}`} onClick={() => updateBook({ coverImageUrl: undefined })}>
             <div className="cover-preview-placeholder">Default</div>
           </button>
 
-          {imagePages.map((p) => (
+          {imagePages.map((page) => (
             <button
-              key={p.id}
+              key={page.id}
               type="button"
-              className={`cover-option ${coverImageUrl === p.contentUrl ? "active" : ""}`}
-              onClick={() => setCoverImageUrl(p.contentUrl)}
-              title={p.title}
+              className={`cover-option ${book.coverImageUrl === page.contentUrl ? "active" : ""}`}
+              onClick={() => updateBook({ coverImageUrl: page.contentUrl })}
+              title={page.title}
             >
-              <img src={p.contentUrl} alt={p.title} className="cover-preview-img" />
+              <img src={page.contentUrl} alt={page.title} className="cover-preview-img" />
             </button>
           ))}
 
-          {/* Upload custom cover */}
           <button
             type="button"
             className={`cover-option cover-option-upload ${isCustomUpload ? "active" : ""}`}
@@ -124,74 +129,144 @@ export function MagazineEditor({ book, onSave, onClose }: MagazineEditorProps) {
             <ImagePlus size={20} />
             <span className="cover-upload-label">Upload</span>
           </button>
-          <input
-            ref={coverUploadRef}
-            type="file"
-            accept="image/*"
-            onChange={handleCoverUpload}
-            style={{ display: "none" }}
-          />
+          <input ref={coverUploadRef} type="file" accept="image/*" onChange={handleCoverUpload} style={{ display: "none" }} />
         </div>
-
-        {coverImageUrl && (
-          <button
-            type="button"
-            className="cover-clear-btn"
-            onClick={() => setCoverImageUrl("")}
-          >
-            Remove cover image
-          </button>
-        )}
       </div>
 
-      {/* --- Title & Description --- */}
       <div className="editor-section">
         <label>Title</label>
-        <input className="editor-input" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input className="editor-input" value={book.title} onChange={(event) => updateBook({ title: event.target.value })} />
       </div>
 
       <div className="editor-section">
         <label>Description</label>
-        <textarea className="editor-input" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <textarea className="editor-input" value={book.description} onChange={(event) => updateBook({ description: event.target.value })} />
       </div>
 
-      {/* --- Page Order --- */}
-      {pages.length > 0 && (
+      {(book.pages?.length ?? 0) > 0 ? (
         <div className="editor-section">
           <label>Page Order</label>
           <div className="page-order-list">
-            {pages.map((p, i) => (
-              <div key={p.id} className="page-order-item">
-                <div className="page-order-info">
-                  {p.contentKind === "image" ? (
-                    <img src={p.contentUrl} alt="" className="page-order-thumb" />
-                  ) : (
-                    <div className="page-order-thumb page-order-thumb-placeholder">
-                      {getContentLabel(p.contentKind).slice(0, 3)}
+            {book.pages?.map((page, index) => {
+              const selected = page.id === selectedPageId;
+              return (
+                <div key={page.id} className={`page-order-item ${selected ? "selected" : ""}`}>
+                  <button type="button" className="page-order-main" onClick={() => onSelectPage(page.id)}>
+                    <div className="page-order-info">
+                      {page.contentKind === "image" ? (
+                        <img src={page.contentUrl} alt="" className="page-order-thumb" />
+                      ) : (
+                        <div className="page-order-thumb page-order-thumb-placeholder">{getContentLabel(page.contentKind).slice(0, 3)}</div>
+                      )}
+                      <span className="page-order-title">{index + 1}. {page.title}</span>
                     </div>
-                  )}
-                  <span className="page-order-title">{i + 1}. {p.title}</span>
+                  </button>
+
+                  <div className="page-order-actions">
+                    <button type="button" onClick={() => movePage(index, -1)} disabled={index === 0}>
+                      <ArrowUp size={14} />
+                    </button>
+                    <button type="button" onClick={() => movePage(index, 1)} disabled={index === (book.pages?.length ?? 0) - 1}>
+                      <ArrowDown size={14} />
+                    </button>
+                    <button type="button" onClick={() => removePage(page.id)} className="danger">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div className="page-order-actions">
-                  <button type="button" onClick={() => movePageUp(i)} disabled={i === 0}>
-                    <ArrowUp size={14} />
-                  </button>
-                  <button type="button" onClick={() => movePageDown(i)} disabled={i === pages.length - 1}>
-                    <ArrowDown size={14} />
-                  </button>
-                  <button type="button" onClick={() => removePage(p.id)} className="danger">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
-      )}
+      ) : null}
+
+      {selectedPage ? (
+        <div className="editor-section">
+          <label>Page Layout</label>
+          <p className="editor-hint">Set the base page layout here. Use the live canvas above for block placement and linked overlays.</p>
+
+          <div className="layout-editor-card">
+            <div className="layout-editor-head">
+              <div>
+                <strong>{selectedPage.title}</strong>
+                <p>{getContentLabel(selectedPage.contentKind)} page</p>
+              </div>
+            </div>
+
+            {selectedPage.contentKind === "pdf" ? (
+              <div className="layout-editor-note">
+                PDF pages keep their document layout. Reorder them here, but edit overlays on the non-PDF pages.
+              </div>
+            ) : (
+              <div className="layout-editor-grid">
+                <div>
+                  <label>Layout Preset</label>
+                  <select
+                    className="editor-input"
+                    value={selectedPage.layout?.preset ?? "auto"}
+                    onChange={(event) => updatePageLayout(selectedPage.id, { preset: event.target.value as PageLayoutConfig["preset"] })}
+                  >
+                    {PAGE_LAYOUT_PRESETS.map((preset) => (
+                      <option key={preset.value} value={preset.value}>
+                        {preset.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label>Theme</label>
+                  <select
+                    className="editor-input"
+                    value={selectedPage.layout?.theme ?? "cool"}
+                    onChange={(event) => updatePageLayout(selectedPage.id, { theme: event.target.value as PageLayoutConfig["theme"] })}
+                  >
+                    {PAGE_LAYOUT_THEMES.map((theme) => (
+                      <option key={theme.value} value={theme.value}>
+                        {theme.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="layout-editor-wide">
+                  <label>Kicker</label>
+                  <input
+                    className="editor-input"
+                    placeholder="Optional section label"
+                    value={selectedPage.layout?.kicker ?? ""}
+                    onChange={(event) => updatePageLayout(selectedPage.id, { kicker: event.target.value })}
+                  />
+                </div>
+
+                <div className="layout-editor-wide">
+                  <label>Headline Override</label>
+                  <input
+                    className="editor-input"
+                    placeholder={selectedPage.title}
+                    value={selectedPage.layout?.headline ?? ""}
+                    onChange={(event) => updatePageLayout(selectedPage.id, { headline: event.target.value })}
+                  />
+                </div>
+
+                <div className="layout-editor-wide">
+                  <label>Body Copy Override</label>
+                  <textarea
+                    className="editor-input"
+                    placeholder={selectedPage.description}
+                    value={selectedPage.layout?.body ?? ""}
+                    onChange={(event) => updatePageLayout(selectedPage.id, { body: event.target.value })}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <div className="editor-footer">
         <button type="button" className="cancel-btn" onClick={onClose}>Cancel</button>
-        <button type="button" className="save-btn" onClick={handleSave}>
+        <button type="button" className="save-btn" onClick={onSave}>
           <Save size={16} /> Save Changes
         </button>
       </div>
