@@ -613,6 +613,10 @@ button {
   margin-top: 24px;
 }
 
+.app-grid-editor {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .library-panel,
 .viewer-shell,
 .magazine-editor-panel {

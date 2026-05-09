@@ -408,57 +408,59 @@ export default function App() {
           <p>Upload a file to start.</p>
         </section>
       ) : (
-        <div className="app-grid">
-          <aside className="library-panel">
-            <div className="library-header">
-              <div>
-                <p className="panel-label">Library</p>
-                <h2>Magazines</h2>
-                <p>{books.length} issue{books.length === 1 ? "" : "s"}</p>
+        <div className={`app-grid ${isEditing ? "app-grid-editor" : ""}`}>
+          {!isEditing ? (
+            <aside className="library-panel">
+              <div className="library-header">
+                <div>
+                  <p className="panel-label">Library</p>
+                  <h2>Magazines</h2>
+                  <p>{books.length} issue{books.length === 1 ? "" : "s"}</p>
+                </div>
               </div>
-            </div>
 
-            <div className="library-list">
-              {books.map((book, index) => {
-                const active = book.id === selectedBookId;
-                return (
-                  <article key={book.id} className={`library-card ${active ? "active" : ""}`}>
-                    <div className="library-card-top">
-                      <span className="source-pill">{book.source === "upload" ? "Upload" : getContentLabel(book.contentKind)}</span>
-                      {book.source === "upload" ? (
-                        <button
-                          type="button"
-                          className="delete-action"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleRemoveBook(book.id);
-                          }}
-                          aria-label={`Remove ${book.title}`}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      ) : null}
-                    </div>
-
-                    <button type="button" className="library-card-body" onClick={() => setSelectedBookId(book.id)}>
-                      <span className="library-card-index">{String(index + 1).padStart(2, "0")}</span>
-                      <strong>{book.title}</strong>
-                      <p>{book.description || "Ready to review."}</p>
-
-                      <div className="library-card-meta">
-                        <span>
-                          {book.contentKind === "pdf" || book.contentKind === "magazine"
-                            ? `${book.pageCount || "--"} pages`
-                            : getContentLabel(book.contentKind)}
-                        </span>
-                        <span>{formatBytes(book.sizeBytes) || new Date(book.createdAt).toLocaleDateString()}</span>
+              <div className="library-list">
+                {books.map((book, index) => {
+                  const active = book.id === selectedBookId;
+                  return (
+                    <article key={book.id} className={`library-card ${active ? "active" : ""}`}>
+                      <div className="library-card-top">
+                        <span className="source-pill">{book.source === "upload" ? "Upload" : getContentLabel(book.contentKind)}</span>
+                        {book.source === "upload" ? (
+                          <button
+                            type="button"
+                            className="delete-action"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleRemoveBook(book.id);
+                            }}
+                            aria-label={`Remove ${book.title}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        ) : null}
                       </div>
-                    </button>
-                  </article>
-                );
-              })}
-            </div>
-          </aside>
+
+                      <button type="button" className="library-card-body" onClick={() => setSelectedBookId(book.id)}>
+                        <span className="library-card-index">{String(index + 1).padStart(2, "0")}</span>
+                        <strong>{book.title}</strong>
+                        <p>{book.description || "Ready to review."}</p>
+
+                        <div className="library-card-meta">
+                          <span>
+                            {book.contentKind === "pdf" || book.contentKind === "magazine"
+                              ? `${book.pageCount || "--"} pages`
+                              : getContentLabel(book.contentKind)}
+                          </span>
+                          <span>{formatBytes(book.sizeBytes) || new Date(book.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            </aside>
+          ) : null}
 
           <div className="workspace-panel">
             <FlipbookViewer
