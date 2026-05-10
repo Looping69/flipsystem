@@ -7,6 +7,8 @@ const textExtensions = new Set(["css", "csv", "html", "js", "json", "log", "md",
 
 export const getFileName = (path: string) => decodeURIComponent(path.split(/[\\/]/).pop() ?? path);
 
+export const isVimeoEmbedUrl = (value?: string) => Boolean(value && /player\.vimeo\.com\/video\/\d+/i.test(value));
+
 export const getExtension = (filename: string) => {
   const cleanName = filename.split("?")[0] ?? filename;
   const extension = cleanName.includes(".") ? cleanName.split(".").pop() : "";

@@ -3,6 +3,7 @@ export type ContentKind = "magazine" | "pdf" | "image" | "video" | "audio" | "te
 export type PageLayoutPreset = "auto" | "cover" | "spotlight" | "split" | "stack" | "quote";
 export type PageLayoutTheme = "cool" | "warm" | "neutral";
 export type ContentBlockKind = "text" | "link" | "button" | "video";
+export type VideoProvider = "vimeo";
 
 export interface PageLayoutConfig {
   preset: PageLayoutPreset;
@@ -36,6 +37,11 @@ export interface ContentPage {
   blocks?: ContentBlock[];
   mimeType?: string;
   sizeBytes?: number;
+  provider?: VideoProvider;
+  embedUrl?: string;
+  externalUrl?: string;
+  posterUrl?: string;
+  durationSeconds?: number;
 }
 
 export interface FlipbookItem {

@@ -11,7 +11,7 @@ import {
   FileQuestion,
   Loader2
 } from "lucide-react";
-import { formatBytes, getContentLabel } from "../content";
+import { formatBytes, getContentLabel, isVimeoEmbedUrl } from "../content";
 import { resolvePageLayout } from "../pageLayouts";
 import { getDocument } from "../pdf";
 import type { ContentPage, FlipbookItem } from "../types";
@@ -317,7 +317,17 @@ const PageContentPreview = React.forwardRef<HTMLDivElement, PageContentPreviewPr
             ) : null}
 
             {page.contentKind === "video" ? (
-              <video className="mixed-video" src={page.contentUrl} controls playsInline />
+              page.embedUrl && isVimeoEmbedUrl(page.embedUrl) ? (
+                <iframe
+                  className="mixed-video mixed-video-embed"
+                  src={page.embedUrl}
+                  title={page.title}
+                  allow="autoplay; fullscreen; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <video className="mixed-video" src={page.contentUrl} controls playsInline poster={page.posterUrl} />
+              )
             ) : null}
 
             {page.contentKind === "audio" ? <audio className="mixed-audio" src={page.contentUrl} controls /> : null}
@@ -350,6 +360,8 @@ type FlipbookViewerProps = {
     onSelectPage: (pageId: string) => void;
     onChange: (updatedBook: FlipbookItem) => void;
     onUpdatePage: (pageId: string, updater: (page: ContentPage) => ContentPage) => void;
+    catalogPages: ContentPage[];
+    onAddCatalogPage: (page: ContentPage) => void;
     onSave: () => void;
     onClose: () => void;
   };
@@ -658,6 +670,8 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
             onSelectPage={editor.onSelectPage}
             onChange={editor.onChange}
             onUpdatePage={editor.onUpdatePage}
+            catalogPages={editor.catalogPages}
+            onAddCatalogPage={editor.onAddCatalogPage}
             onSave={editor.onSave}
             onClose={editor.onClose}
           />

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "npx vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sync:vimeo": "node scripts/sync-vimeo-profile.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.563.0",

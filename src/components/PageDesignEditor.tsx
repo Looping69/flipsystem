@@ -2,6 +2,7 @@ import React from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Check,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -19,7 +20,7 @@ import {
   Video,
   X
 } from "lucide-react";
-import { getContentLabel } from "../content";
+import { getContentLabel, isVimeoEmbedUrl } from "../content";
 import { PAGE_LAYOUT_PRESETS, PAGE_LAYOUT_THEMES, resolvePageLayout } from "../pageLayouts";
 import type { ContentBlock, ContentBlockKind, ContentPage, FlipbookItem, PageLayoutConfig } from "../types";
 
@@ -29,6 +30,8 @@ type PageDesignEditorProps = {
   onSelectPage: (pageId: string) => void;
   onChange: (updatedBook: FlipbookItem) => void;
   onUpdatePage: (pageId: string, updater: (page: ContentPage) => ContentPage) => void;
+  catalogPages: ContentPage[];
+  onAddCatalogPage: (page: ContentPage) => void;
   onSave: () => void;
   onClose: () => void;
 };
@@ -87,10 +90,20 @@ const createBlock = (kind: ContentBlockKind, page: ContentPage): ContentBlock =>
         height: 24,
         label: "Video block",
         body: "Optional linked video panel",
-        mediaUrl: page.contentKind === "video" ? page.contentUrl : "",
-        url: "https://"
+        mediaUrl: page.contentKind === "video" ? page.embedUrl ?? page.contentUrl : "",
+        url: page.externalUrl ?? "https://"
       };
   }
+};
+
+const formatDuration = (seconds = 0) => {
+  if (!seconds) {
+    return "";
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
 };
 
 export function PageDesignEditor({
@@ -99,11 +112,14 @@ export function PageDesignEditor({
   onSelectPage,
   onChange,
   onUpdatePage,
+  catalogPages,
+  onAddCatalogPage,
   onSave,
   onClose
 }: PageDesignEditorProps) {
   const [selectedBlockId, setSelectedBlockId] = React.useState("");
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(true);
+  const [videoQuery, setVideoQuery] = React.useState("");
   const coverUploadRef = React.useRef<HTMLInputElement>(null);
   const surfaceRef = React.useRef<HTMLDivElement | null>(null);
   const dragRef = React.useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
@@ -126,6 +142,19 @@ export function PageDesignEditor({
   const isQuoteLayout = layout?.preset === "quote";
   const isFullPageMedia = Boolean(isMediaPage && (isCoverLayout || isSpotlightLayout));
   const supportsCanvasEditing = Boolean(page && page.contentKind !== "pdf");
+  const filteredCatalogPages = React.useMemo(() => {
+    const normalizedQuery = videoQuery.trim().toLowerCase();
+    return catalogPages.filter((entry) => {
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return (
+        entry.title.toLowerCase().includes(normalizedQuery) ||
+        entry.description.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [catalogPages, videoQuery]);
 
   React.useEffect(() => {
     if (!blocks.length) {
@@ -347,7 +376,19 @@ export function PageDesignEditor({
 
                     <div className="mixed-page-asset">
                       {page.contentKind === "image" ? <img className="mixed-image" src={page.contentUrl} alt={`${pageLabel} page`} /> : null}
-                      {page.contentKind === "video" ? <video className="mixed-video" src={page.contentUrl} controls playsInline /> : null}
+                      {page.contentKind === "video" ? (
+                        page.embedUrl && isVimeoEmbedUrl(page.embedUrl) ? (
+                          <iframe
+                            className="mixed-video mixed-video-embed"
+                            src={page.embedUrl}
+                            title={page.title}
+                            allow="autoplay; fullscreen; picture-in-picture"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <video className="mixed-video" src={page.contentUrl} controls playsInline poster={page.posterUrl} />
+                        )
+                      ) : null}
                       {page.contentKind === "audio" ? <audio className="mixed-audio" src={page.contentUrl} controls /> : null}
                     </div>
 
@@ -401,7 +442,21 @@ export function PageDesignEditor({
                                   <Video size={16} />
                                   <span>{block.label || "Video block"}</span>
                                 </div>
-                                {block.mediaUrl ? <video src={block.mediaUrl} muted controls playsInline /> : <p>Add a video URL or use the page video.</p>}
+                                {block.mediaUrl ? (
+                                  isVimeoEmbedUrl(block.mediaUrl) ? (
+                                    <iframe
+                                      className="design-video-embed"
+                                      src={block.mediaUrl}
+                                      title={block.label || "Video block"}
+                                      allow="autoplay; fullscreen; picture-in-picture"
+                                      allowFullScreen
+                                    />
+                                  ) : (
+                                    <video src={block.mediaUrl} muted controls playsInline />
+                                  )
+                                ) : (
+                                  <p>Add a video URL or use the page video.</p>
+                                )}
                                 {block.url ? (
                                   <a href={block.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
                                     <span>{block.body || "Open linked destination"}</span>
@@ -534,8 +589,8 @@ export function PageDesignEditor({
                   <div key={entry.id} className={`page-order-item ${selected ? "selected" : ""}`}>
                     <button type="button" className="page-order-main" onClick={() => onSelectPage(entry.id)}>
                       <div className="page-order-info">
-                        {entry.contentKind === "image" ? (
-                          <img src={entry.contentUrl} alt="" className="page-order-thumb" />
+                        {entry.contentKind === "image" || (entry.contentKind === "video" && entry.posterUrl) ? (
+                          <img src={entry.contentKind === "image" ? entry.contentUrl : entry.posterUrl} alt="" className="page-order-thumb" />
                         ) : (
                           <div className="page-order-thumb page-order-thumb-placeholder">{getContentLabel(entry.contentKind).slice(0, 3)}</div>
                         )}
@@ -555,6 +610,46 @@ export function PageDesignEditor({
                       </button>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="drawer-section">
+            <label>Vimeo Library</label>
+            <p className="editor-hint">Add profile videos to the magazine one by one. They stay selectable instead of being dumped in by default.</p>
+            <input
+              className="editor-input"
+              value={videoQuery}
+              onChange={(event) => setVideoQuery(event.target.value)}
+              placeholder="Search Vimeo videos"
+            />
+            <div className="catalog-video-list">
+              {filteredCatalogPages.map((entry) => {
+                const alreadyAdded = pages.some((pageEntry) => pageEntry.id === entry.id);
+                return (
+                  <article key={entry.id} className={`catalog-video-card ${alreadyAdded ? "is-added" : ""}`}>
+                    <div className="catalog-video-thumb-shell">
+                      {entry.posterUrl ? (
+                        <img src={entry.posterUrl} alt="" className="catalog-video-thumb" />
+                      ) : (
+                        <div className="catalog-video-thumb catalog-video-thumb-empty" />
+                      )}
+                    </div>
+                    <div className="catalog-video-copy">
+                      <strong>{entry.title}</strong>
+                      <span>{formatDuration(entry.durationSeconds)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`catalog-video-action ${alreadyAdded ? "is-added" : ""}`}
+                      onClick={() => onAddCatalogPage(entry)}
+                      disabled={alreadyAdded}
+                    >
+                      {alreadyAdded ? <Check size={14} /> : <Plus size={14} />}
+                      <span>{alreadyAdded ? "Added" : "Add"}</span>
+                    </button>
+                  </article>
                 );
               })}
             </div>

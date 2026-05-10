@@ -2,6 +2,7 @@ import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "
 import { BookOpen, ExternalLink, FileUp, Layers3, Sparkles, Trash2 } from "lucide-react";
 import { formatBytes, getContentKind, getContentLabel, normalizeTitle } from "./content";
 import { assetBooks } from "./data/assetBooks";
+import { vimeoProfileVideos } from "./data/vimeoProfileVideos";
 import { getDocument } from "./pdf";
 import { FlipbookViewer } from "./components/FlipbookViewer";
 import type { ContentPage, FlipbookItem } from "./types";
@@ -26,6 +27,13 @@ const cloneBook = (book: FlipbookItem) => {
     return structuredClone(book);
   }
   return JSON.parse(JSON.stringify(book)) as FlipbookItem;
+};
+
+const clonePage = (page: ContentPage) => {
+  if (typeof structuredClone === "function") {
+    return structuredClone(page);
+  }
+  return JSON.parse(JSON.stringify(page)) as ContentPage;
 };
 
 export default function App() {
@@ -254,6 +262,27 @@ export default function App() {
     );
   }, []);
 
+  const handleAddCatalogPage = useCallback((catalogPage: ContentPage) => {
+    setDraftBook((current) => {
+      if (!current) {
+        return current;
+      }
+
+      if ((current.pages ?? []).some((page) => page.id === catalogPage.id)) {
+        return current;
+      }
+
+      const nextPage = clonePage(catalogPage);
+      return {
+        ...current,
+        pages: [...(current.pages ?? []), nextPage],
+        pageCount: (current.pageCount || 0) + 1
+      };
+    });
+    setEditorPageId(catalogPage.id);
+    setRecentlyAddedPageId(catalogPage.id);
+  }, []);
+
   useEffect(() => {
     const onPopState = () => setRoutePath(window.location.pathname);
     window.addEventListener("popstate", onPopState);
@@ -474,6 +503,8 @@ export default function App() {
                       onSelectPage: setEditorPageId,
                       onChange: handleDraftBookChange,
                       onUpdatePage: handleDraftPageUpdate,
+                      catalogPages: vimeoProfileVideos,
+                      onAddCatalogPage: handleAddCatalogPage,
                       onSave: () => handleUpdateBook(draftBook),
                       onClose: handleCancelEditing
                     }
