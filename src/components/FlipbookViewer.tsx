@@ -9,7 +9,9 @@ import {
   Download,
   ExternalLink,
   FileQuestion,
-  Loader2
+  Loader2,
+  Minus,
+  Plus
 } from "lucide-react";
 import { formatBytes, getContentLabel, isVimeoEmbedUrl } from "../content";
 import { resolvePageLayout } from "../pageLayouts";
@@ -81,6 +83,12 @@ const getViewportSize = (): ViewportSize => ({
   width: window.innerWidth,
   height: window.innerHeight
 });
+
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 2.4;
+const ZOOM_STEP = 0.2;
+
+const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(value.toFixed(2))));
 
 const CoverPage = React.forwardRef<HTMLDivElement, CoverProps>(function CoverPage(
   { title, subtitle, isBack = false, coverImage },
@@ -375,6 +383,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [viewportSize, setViewportSize] = useState<ViewportSize>(getViewportSize);
   const [pageAspectRatio, setPageAspectRatio] = useState(1.4142);
+  const [presentationZoom, setPresentationZoom] = useState(1);
   const bookRef = useRef<{
     pageFlip?: () => { flipPrev: () => void; flipNext: () => void; turnToPage: (index: number) => void };
   } | null>(null);
@@ -383,6 +392,12 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
   const isMagazine = book.contentKind === "magazine";
   const isFlipbook = isPdf || isMagazine;
   const isPresentation = variant === "presentation";
+  const canZoomOut = presentationZoom > ZOOM_MIN;
+  const canZoomIn = presentationZoom < ZOOM_MAX;
+
+  const handleZoomIn = () => setPresentationZoom((zoom) => clampZoom(zoom + ZOOM_STEP));
+  const handleZoomOut = () => setPresentationZoom((zoom) => clampZoom(zoom - ZOOM_STEP));
+  const handleZoomReset = () => setPresentationZoom(ZOOM_MIN);
 
   const magazinePages = useMemo(() => (isMagazine ? book.pages ?? [] : []), [book.pages, isMagazine]);
   const selectedEditorPage = useMemo(
@@ -463,6 +478,12 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    if (isPresentation) {
+      setPresentationZoom(ZOOM_MIN);
+    }
+  }, [book.id, isPresentation]);
 
   useEffect(() => {
     let mounted = true;
@@ -556,9 +577,14 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
     const maxPageWidth = isPresentation ? 820 : 620;
     const pageWidth = Math.max(200, Math.min(maxPageWidth, Math.floor(Math.min(widthByViewport, widthByHeight))));
     const pageHeight = Math.max(250, Math.floor(pageWidth * pageAspectRatio));
+    const zoom = isPresentation ? presentationZoom : 1;
 
-    return { isMobile, pageWidth, pageHeight };
-  }, [isPresentation, pageAspectRatio, viewportSize.height, viewportSize.width]);
+    return {
+      isMobile,
+      pageWidth: Math.max(200, Math.floor(pageWidth * zoom)),
+      pageHeight: Math.max(250, Math.floor(pageHeight * zoom))
+    };
+  }, [isPresentation, pageAspectRatio, presentationZoom, viewportSize.height, viewportSize.width]);
 
   const displayLabel = useMemo(() => {
     if (totalPages <= 0) {
@@ -623,6 +649,18 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
         event.preventDefault();
         handlePrev();
       }
+      if (isPresentation && isFlipbook && (event.key === "+" || event.key === "=")) {
+        event.preventDefault();
+        handleZoomIn();
+      }
+      if (isPresentation && isFlipbook && (event.key === "-" || event.key === "_")) {
+        event.preventDefault();
+        handleZoomOut();
+      }
+      if (isPresentation && isFlipbook && event.key === "0") {
+        event.preventDefault();
+        handleZoomReset();
+      }
       if (event.key === "Escape" && onBack) {
         event.preventDefault();
         onBack();
@@ -631,7 +669,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isFlipbook, onBack, totalPages]);
+  }, [isFlipbook, isPresentation, onBack]);
 
   return (
     <section className={`viewer-shell ${isPresentation ? "presentation-viewer" : ""}`}>
@@ -690,10 +728,10 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
               height={layout.pageHeight}
               size="fixed"
               minWidth={200}
-              maxWidth={isPresentation ? 860 : 640}
-              minHeight={200}
-              maxHeight={isPresentation ? 1400 : 1080}
-              maxShadowOpacity={0.65}
+               maxWidth={isPresentation ? Math.max(860, layout.pageWidth + 4) : 640}
+               minHeight={200}
+               maxHeight={isPresentation ? Math.max(1400, layout.pageHeight + 4) : 1080}
+               maxShadowOpacity={0.65}
               showCover
               mobileScrollSupport={false}
               useMouseEvents
@@ -709,6 +747,22 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
 
           {isPresentation && currentPageIndex <= 0 ? (
             <div className="presentation-hint">Click or swipe to open the magazine</div>
+          ) : null}
+
+          {isPresentation ? (
+            <div className="presentation-zoom-controls" aria-label="Zoom controls">
+              <button type="button" className="flipbook-btn presentation-zoom-btn" onClick={handleZoomOut} disabled={!canZoomOut}>
+                <Minus size={16} />
+                <span>Out</span>
+              </button>
+              <button type="button" className="flipbook-btn presentation-zoom-value" onClick={handleZoomReset}>
+                {Math.round(presentationZoom * 100)}%
+              </button>
+              <button type="button" className="flipbook-btn presentation-zoom-btn" onClick={handleZoomIn} disabled={!canZoomIn}>
+                <Plus size={16} />
+                <span>In</span>
+              </button>
+            </div>
           ) : null}
 
           {!isPresentation ? <div className="flipbook-toolbar">
