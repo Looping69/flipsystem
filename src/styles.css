@@ -1454,17 +1454,112 @@ button {
   right: 20px;
   bottom: 18px;
   z-index: 8;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
 }
 
-.presentation-zoom-btn {
-  min-width: 84px;
+.presentation-zoom-toggle {
+  min-width: 172px;
 }
 
-.presentation-zoom-value {
-  min-width: 74px;
+.presentation-zoom-toggle.active {
+  border-color: rgba(243, 208, 138, 0.42);
+  background: rgba(214, 170, 92, 0.18);
+  color: #fff5d7;
+}
+
+.presentation-lens {
+  position: absolute;
+  z-index: 6;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.presentation-lens-viewport {
+  position: relative;
+  width: min(220px, 42vw);
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 2px solid rgba(243, 208, 138, 0.86);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02)),
+    rgba(6, 10, 16, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(255, 244, 214, 0.1),
+    0 30px 48px rgba(0, 0, 0, 0.46);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.presentation-lens-viewport:active {
+  cursor: grabbing;
+}
+
+.presentation-lens-content {
+  position: absolute;
+  inset: 0;
+}
+
+.presentation-lens-clone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 0;
+  transform-origin: top left;
+  filter: none;
+  pointer-events: none;
+}
+
+.presentation-lens-clone .stf__wrapper,
+.presentation-lens-clone .stf__block,
+.presentation-lens-clone .stf__parent {
+  overflow: visible !important;
+}
+
+.presentation-lens-crosshair {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.presentation-lens-crosshair::before,
+.presentation-lens-crosshair::after {
+  content: "";
+  position: absolute;
+  background: rgba(255, 245, 218, 0.55);
+}
+
+.presentation-lens-crosshair::before {
+  top: 50%;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.presentation-lens-crosshair::after {
+  left: 50%;
+  top: 14px;
+  bottom: 14px;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.presentation-lens-label {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(6, 10, 16, 0.72);
+  border: 1px solid rgba(243, 208, 138, 0.34);
+  color: #fff5d7;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .magazine-editor-panel {
@@ -2382,6 +2477,23 @@ textarea.editor-input {
 
   .flip-cover {
     padding: 1.25rem;
+  }
+
+  .presentation-zoom-controls {
+    right: 12px;
+    left: 12px;
+    bottom: 12px;
+  }
+
+  .presentation-zoom-toggle {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .presentation-lens-viewport {
+    width: min(180px, 52vw);
+    border-radius: 20px;
   }
 
   .layout-editor-grid {
