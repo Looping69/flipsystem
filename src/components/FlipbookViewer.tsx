@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HTMLFlipBook from "react-pageflip";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
@@ -87,6 +87,7 @@ const getViewportSize = (): ViewportSize => ({
 const ZOOM_MIN = 1;
 const ZOOM_MAX = 2.4;
 const ZOOM_STEP = 0.2;
+const PAGE_FLIP_SAFETY_PADDING = 4;
 
 const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(value.toFixed(2))));
 
@@ -395,9 +396,9 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
   const canZoomOut = presentationZoom > ZOOM_MIN;
   const canZoomIn = presentationZoom < ZOOM_MAX;
 
-  const handleZoomIn = () => setPresentationZoom((zoom) => clampZoom(zoom + ZOOM_STEP));
-  const handleZoomOut = () => setPresentationZoom((zoom) => clampZoom(zoom - ZOOM_STEP));
-  const handleZoomReset = () => setPresentationZoom(ZOOM_MIN);
+  const handleZoomIn = useCallback(() => setPresentationZoom((zoom) => clampZoom(zoom + ZOOM_STEP)), []);
+  const handleZoomOut = useCallback(() => setPresentationZoom((zoom) => clampZoom(zoom - ZOOM_STEP)), []);
+  const handleZoomReset = useCallback(() => setPresentationZoom(ZOOM_MIN), []);
 
   const magazinePages = useMemo(() => (isMagazine ? book.pages ?? [] : []), [book.pages, isMagazine]);
   const selectedEditorPage = useMemo(
@@ -669,7 +670,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isFlipbook, isPresentation, onBack]);
+  }, [handleZoomIn, handleZoomOut, handleZoomReset, isFlipbook, isPresentation, onBack]);
 
   return (
     <section className={`viewer-shell ${isPresentation ? "presentation-viewer" : ""}`}>
@@ -728,9 +729,9 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
               height={layout.pageHeight}
               size="fixed"
               minWidth={200}
-               maxWidth={isPresentation ? Math.max(860, layout.pageWidth + 4) : 640}
+               maxWidth={isPresentation ? Math.max(860, layout.pageWidth + PAGE_FLIP_SAFETY_PADDING) : 640}
                minHeight={200}
-               maxHeight={isPresentation ? Math.max(1400, layout.pageHeight + 4) : 1080}
+               maxHeight={isPresentation ? Math.max(1400, layout.pageHeight + PAGE_FLIP_SAFETY_PADDING) : 1080}
                maxShadowOpacity={0.65}
               showCover
               mobileScrollSupport={false}
