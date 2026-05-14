@@ -628,11 +628,10 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
     ];
   }, [book.coverImageUrl, book.title, isMagazine, layout.pageHeight, layout.pageWidth, renderablePages]);
 
-  const getFlipBookApi = useCallback(() => bookRef.current?.pageFlip?.(), []);
-  const handlePrev = useCallback(() => getFlipBookApi()?.flipPrev(), [getFlipBookApi]);
-  const handleNext = useCallback(() => getFlipBookApi()?.flipNext(), [getFlipBookApi]);
-  const handleFirst = useCallback(() => getFlipBookApi()?.turnToPage(0), [getFlipBookApi]);
-  const handleLast = useCallback(() => getFlipBookApi()?.turnToPage(totalPages + 1), [getFlipBookApi, totalPages]);
+  const handlePrev = () => bookRef.current?.pageFlip?.()?.flipPrev();
+  const handleNext = () => bookRef.current?.pageFlip?.()?.flipNext();
+  const handleFirst = () => bookRef.current?.pageFlip?.()?.turnToPage(0);
+  const handleLast = () => bookRef.current?.pageFlip?.()?.turnToPage(totalPages + 1);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -641,14 +640,14 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
           return;
         }
         event.preventDefault();
-        handleNext();
+        bookRef.current?.pageFlip?.()?.flipNext();
       }
       if (event.key === "ArrowLeft") {
         if (!isFlipbook) {
           return;
         }
         event.preventDefault();
-        handlePrev();
+        bookRef.current?.pageFlip?.()?.flipPrev();
       }
       const usesZoomModifier = event.ctrlKey || event.metaKey;
       const isZoomInShortcut = usesZoomModifier && (event.code === "Equal" || event.code === "NumpadAdd");
@@ -675,7 +674,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleNext, handlePrev, handleZoomIn, handleZoomOut, handleZoomReset, isFlipbook, isPresentation, onBack, totalPages]);
+  }, [handleZoomIn, handleZoomOut, handleZoomReset, isFlipbook, isPresentation, onBack, totalPages]);
 
   return (
     <section className={`viewer-shell ${isPresentation ? "presentation-viewer" : ""}`}>
