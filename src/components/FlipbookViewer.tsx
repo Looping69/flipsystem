@@ -406,12 +406,14 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
 
     const halfWidth = lensRect.width / 2;
     const halfHeight = lensRect.height / 2;
-    const maxX = Math.max(halfWidth, stageRect.width - halfWidth);
-    const maxY = Math.max(halfHeight, stageRect.height - halfHeight);
+    const minX = stageRect.width <= lensRect.width ? stageRect.width / 2 : halfWidth;
+    const maxX = stageRect.width <= lensRect.width ? stageRect.width / 2 : stageRect.width - halfWidth;
+    const minY = stageRect.height <= lensRect.height ? stageRect.height / 2 : halfHeight;
+    const maxY = stageRect.height <= lensRect.height ? stageRect.height / 2 : stageRect.height - halfHeight;
 
     return {
-      x: Math.min(maxX, Math.max(halfWidth, position.x)),
-      y: Math.min(maxY, Math.max(halfHeight, position.y))
+      x: Math.min(maxX, Math.max(minX, position.x)),
+      y: Math.min(maxY, Math.max(minY, position.y))
     };
   }, []);
 
@@ -952,7 +954,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
                 >
                   <div ref={lensContentRef} className="presentation-lens-content" aria-hidden="true" />
                   <div className="presentation-lens-crosshair" aria-hidden="true" />
-                  <div className="presentation-lens-label">10x</div>
+                  <div className="presentation-lens-label">{PRESENTATION_LENS_ZOOM}x</div>
                 </div>
               </div>
             ) : null}
