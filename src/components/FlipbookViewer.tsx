@@ -650,8 +650,10 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
         event.preventDefault();
         handlePrev();
       }
-      const isZoomInShortcut = event.code === "Equal" || event.code === "NumpadAdd";
-      const isZoomOutShortcut = event.code === "Minus" || event.code === "NumpadSubtract";
+      const usesZoomModifier = event.ctrlKey || event.metaKey;
+      const isZoomInShortcut = usesZoomModifier && (event.code === "Equal" || event.code === "NumpadAdd");
+      const isZoomOutShortcut = usesZoomModifier && (event.code === "Minus" || event.code === "NumpadSubtract");
+      const isZoomResetShortcut = usesZoomModifier && (event.code === "Digit0" || event.code === "Numpad0");
 
       if (isPresentation && isFlipbook && isZoomInShortcut) {
         event.preventDefault();
@@ -661,7 +663,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
         event.preventDefault();
         handleZoomOut();
       }
-      if (isPresentation && isFlipbook && event.key === "0") {
+      if (isPresentation && isFlipbook && isZoomResetShortcut) {
         event.preventDefault();
         handleZoomReset();
       }
