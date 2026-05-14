@@ -650,11 +650,14 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
         event.preventDefault();
         handlePrev();
       }
-      if (isPresentation && isFlipbook && (event.key === "+" || event.key === "=")) {
+      const isZoomInShortcut = event.code === "Equal" || event.code === "NumpadAdd";
+      const isZoomOutShortcut = event.code === "Minus" || event.code === "NumpadSubtract";
+
+      if (isPresentation && isFlipbook && isZoomInShortcut) {
         event.preventDefault();
         handleZoomIn();
       }
-      if (isPresentation && isFlipbook && (event.key === "-" || event.key === "_")) {
+      if (isPresentation && isFlipbook && isZoomOutShortcut) {
         event.preventDefault();
         handleZoomOut();
       }
@@ -756,7 +759,12 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
                 <Minus size={16} />
                 <span>Out</span>
               </button>
-              <button type="button" className="flipbook-btn presentation-zoom-value" onClick={handleZoomReset}>
+              <button
+                type="button"
+                className="flipbook-btn presentation-zoom-value"
+                onClick={handleZoomReset}
+                aria-label="Reset zoom to 100%"
+              >
                 {Math.round(presentationZoom * 100)}%
               </button>
               <button type="button" className="flipbook-btn presentation-zoom-btn" onClick={handleZoomIn} disabled={!canZoomIn}>
