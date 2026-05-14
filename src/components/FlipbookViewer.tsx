@@ -628,11 +628,11 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
     ];
   }, [book.coverImageUrl, book.title, isMagazine, layout.pageHeight, layout.pageWidth, renderablePages]);
 
-  const getFlipBookApi = () => bookRef.current?.pageFlip?.();
-  const handlePrev = () => getFlipBookApi()?.flipPrev();
-  const handleNext = () => getFlipBookApi()?.flipNext();
-  const handleFirst = () => getFlipBookApi()?.turnToPage(0);
-  const handleLast = () => getFlipBookApi()?.turnToPage(totalPages + 1);
+  const getFlipBookApi = useCallback(() => bookRef.current?.pageFlip?.(), []);
+  const handlePrev = useCallback(() => getFlipBookApi()?.flipPrev(), [getFlipBookApi]);
+  const handleNext = useCallback(() => getFlipBookApi()?.flipNext(), [getFlipBookApi]);
+  const handleFirst = useCallback(() => getFlipBookApi()?.turnToPage(0), [getFlipBookApi]);
+  const handleLast = useCallback(() => getFlipBookApi()?.turnToPage(totalPages + 1), [getFlipBookApi, totalPages]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -670,7 +670,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleZoomIn, handleZoomOut, handleZoomReset, isFlipbook, isPresentation, onBack]);
+  }, [handleNext, handlePrev, handleZoomIn, handleZoomOut, handleZoomReset, isFlipbook, isPresentation, onBack, totalPages]);
 
   return (
     <section className={`viewer-shell ${isPresentation ? "presentation-viewer" : ""}`}>
@@ -729,10 +729,10 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
               height={layout.pageHeight}
               size="fixed"
               minWidth={200}
-               maxWidth={isPresentation ? Math.max(860, layout.pageWidth + PAGE_FLIP_SAFETY_PADDING) : 640}
-               minHeight={200}
-               maxHeight={isPresentation ? Math.max(1400, layout.pageHeight + PAGE_FLIP_SAFETY_PADDING) : 1080}
-               maxShadowOpacity={0.65}
+              maxWidth={isPresentation ? Math.max(860, layout.pageWidth + PAGE_FLIP_SAFETY_PADDING) : 640}
+              minHeight={200}
+              maxHeight={isPresentation ? Math.max(1400, layout.pageHeight + PAGE_FLIP_SAFETY_PADDING) : 1080}
+              maxShadowOpacity={0.65}
               showCover
               mobileScrollSupport={false}
               useMouseEvents
