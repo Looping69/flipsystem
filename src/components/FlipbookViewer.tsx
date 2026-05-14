@@ -10,8 +10,7 @@ import {
   ExternalLink,
   FileQuestion,
   Loader2,
-  Minus,
-  Plus
+  Search
 } from "lucide-react";
 import { formatBytes, getContentLabel, isVimeoEmbedUrl } from "../content";
 import { resolvePageLayout } from "../pageLayouts";
@@ -84,12 +83,9 @@ const getViewportSize = (): ViewportSize => ({
   height: window.innerHeight
 });
 
-const ZOOM_MIN = 1;
-const ZOOM_MAX = 2.4;
-const ZOOM_STEP = 0.2;
 const PAGE_FLIP_SAFETY_PADDING = 4;
-
-const clampZoom = (value: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(value.toFixed(2))));
+const PRESENTATION_LENS_ZOOM = 10;
+const DEFAULT_LENS_POSITION = { x: 180, y: 180 };
 
 const CoverPage = React.forwardRef<HTMLDivElement, CoverProps>(function CoverPage(
   { title, subtitle, isBack = false, coverImage },
@@ -384,21 +380,165 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [viewportSize, setViewportSize] = useState<ViewportSize>(getViewportSize);
   const [pageAspectRatio, setPageAspectRatio] = useState(1.4142);
-  const [presentationZoom, setPresentationZoom] = useState(1);
+  const [isLensEnabled, setIsLensEnabled] = useState(false);
+  const [lensPosition, setLensPosition] = useState(DEFAULT_LENS_POSITION);
   const bookRef = useRef<{
     pageFlip?: () => { flipPrev: () => void; flipNext: () => void; turnToPage: (index: number) => void };
   } | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const lensViewportRef = useRef<HTMLDivElement | null>(null);
+  const lensContentRef = useRef<HTMLDivElement | null>(null);
+  const lensCloneRef = useRef<HTMLElement | null>(null);
+  const lensPointerIdRef = useRef<number | null>(null);
 
   const isPdf = book.contentKind === "pdf";
   const isMagazine = book.contentKind === "magazine";
   const isFlipbook = isPdf || isMagazine;
   const isPresentation = variant === "presentation";
-  const canZoomOut = presentationZoom > ZOOM_MIN;
-  const canZoomIn = presentationZoom < ZOOM_MAX;
 
-  const handleZoomIn = useCallback(() => setPresentationZoom((zoom) => clampZoom(zoom + ZOOM_STEP)), []);
-  const handleZoomOut = useCallback(() => setPresentationZoom((zoom) => clampZoom(zoom - ZOOM_STEP)), []);
-  const handleZoomReset = useCallback(() => setPresentationZoom(ZOOM_MIN), []);
+  const getConstrainedLensPosition = useCallback((position: { x: number; y: number }) => {
+    const stageRect = stageRef.current?.getBoundingClientRect();
+    const lensRect = lensViewportRef.current?.getBoundingClientRect();
+
+    if (!stageRect || !lensRect) {
+      return position;
+    }
+
+    const halfWidth = lensRect.width / 2;
+    const halfHeight = lensRect.height / 2;
+    const minX = stageRect.width <= lensRect.width ? stageRect.width / 2 : halfWidth;
+    const maxX = stageRect.width <= lensRect.width ? stageRect.width / 2 : stageRect.width - halfWidth;
+    const minY = stageRect.height <= lensRect.height ? stageRect.height / 2 : halfHeight;
+    const maxY = stageRect.height <= lensRect.height ? stageRect.height / 2 : stageRect.height - halfHeight;
+
+    return {
+      x: Math.min(maxX, Math.max(minX, position.x)),
+      y: Math.min(maxY, Math.max(minY, position.y))
+    };
+  }, []);
+
+  const syncLensTransform = useCallback(() => {
+    if (!isLensEnabled) {
+      return;
+    }
+
+    const stage = stageRef.current;
+    const lensViewport = lensViewportRef.current;
+    const lensClone = lensCloneRef.current;
+    const source = stage?.querySelector(".flipbook-root") as HTMLElement | null;
+
+    if (!stage || !lensViewport || !lensClone || !source) {
+      return;
+    }
+
+    const stageRect = stage.getBoundingClientRect();
+    const sourceRect = source.getBoundingClientRect();
+    const lensRect = lensViewport.getBoundingClientRect();
+    const relativeX = Math.min(sourceRect.width, Math.max(0, lensPosition.x - (sourceRect.left - stageRect.left)));
+    const relativeY = Math.min(sourceRect.height, Math.max(0, lensPosition.y - (sourceRect.top - stageRect.top)));
+    const translateX = lensRect.width / 2 - relativeX * PRESENTATION_LENS_ZOOM;
+    const translateY = lensRect.height / 2 - relativeY * PRESENTATION_LENS_ZOOM;
+
+    lensClone.style.transform = `translate(${translateX}px, ${translateY}px) scale(${PRESENTATION_LENS_ZOOM})`;
+  }, [isLensEnabled, lensPosition.x, lensPosition.y]);
+
+  const syncLensClone = useCallback(() => {
+    if (!isLensEnabled) {
+      return;
+    }
+
+    const lensViewport = lensViewportRef.current;
+    const lensContent = lensContentRef.current;
+    const source = stageRef.current?.querySelector(".flipbook-root") as HTMLElement | null;
+
+    if (!lensViewport || !lensContent || !source) {
+      return;
+    }
+
+    const clone = source.cloneNode(true) as HTMLElement;
+    const sourceCanvases = source.querySelectorAll("canvas");
+    const cloneCanvases = clone.querySelectorAll("canvas");
+
+    clone.classList.add("presentation-lens-clone");
+
+    sourceCanvases.forEach((sourceCanvas, index) => {
+      const cloneCanvas = cloneCanvases[index];
+
+      if (!(sourceCanvas instanceof HTMLCanvasElement) || !(cloneCanvas instanceof HTMLCanvasElement)) {
+        return;
+      }
+
+      cloneCanvas.width = sourceCanvas.width;
+      cloneCanvas.height = sourceCanvas.height;
+      cloneCanvas.style.width = sourceCanvas.style.width;
+      cloneCanvas.style.height = sourceCanvas.style.height;
+
+      const context = cloneCanvas.getContext("2d");
+      if (context) {
+        context.drawImage(sourceCanvas, 0, 0);
+      }
+    });
+
+    lensContent.replaceChildren(clone);
+    lensCloneRef.current = clone;
+    syncLensTransform();
+  }, [isLensEnabled, syncLensTransform]);
+
+  const updateLensPositionFromPointer = useCallback(
+    (clientX: number, clientY: number) => {
+      const stageRect = stageRef.current?.getBoundingClientRect();
+
+      if (!stageRect) {
+        return;
+      }
+
+      setLensPosition(
+        getConstrainedLensPosition({
+          x: clientX - stageRect.left,
+          y: clientY - stageRect.top
+        })
+      );
+    },
+    [getConstrainedLensPosition]
+  );
+
+  const handleLensToggle = useCallback(() => {
+    setIsLensEnabled((current) => !current);
+  }, []);
+
+  const handleLensPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      lensPointerIdRef.current = event.pointerId;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      updateLensPositionFromPointer(event.clientX, event.clientY);
+    },
+    [updateLensPositionFromPointer]
+  );
+
+  const handleLensPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (lensPointerIdRef.current !== event.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      updateLensPositionFromPointer(event.clientX, event.clientY);
+    },
+    [updateLensPositionFromPointer]
+  );
+
+  const handleLensPointerRelease = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (lensPointerIdRef.current !== event.pointerId) {
+      return;
+    }
+
+    lensPointerIdRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
 
   const magazinePages = useMemo(() => (isMagazine ? book.pages ?? [] : []), [book.pages, isMagazine]);
   const selectedEditorPage = useMemo(
@@ -482,9 +622,21 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
 
   useEffect(() => {
     if (isPresentation) {
-      setPresentationZoom(ZOOM_MIN);
+      setIsLensEnabled(false);
+      setLensPosition(DEFAULT_LENS_POSITION);
     }
   }, [book.id, isPresentation]);
+
+  useEffect(() => {
+    if (!isLensEnabled) {
+      lensCloneRef.current = null;
+      lensPointerIdRef.current = null;
+      lensContentRef.current?.replaceChildren();
+      return;
+    }
+
+    setLensPosition((current) => getConstrainedLensPosition(current));
+  }, [getConstrainedLensPosition, isLensEnabled, viewportSize.height, viewportSize.width]);
 
   useEffect(() => {
     let mounted = true;
@@ -578,14 +730,13 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
     const maxPageWidth = isPresentation ? 820 : 620;
     const pageWidth = Math.max(200, Math.min(maxPageWidth, Math.floor(Math.min(widthByViewport, widthByHeight))));
     const pageHeight = Math.max(250, Math.floor(pageWidth * pageAspectRatio));
-    const zoom = isPresentation ? presentationZoom : 1;
 
     return {
       isMobile,
-      pageWidth: Math.max(200, Math.floor(pageWidth * zoom)),
-      pageHeight: Math.max(250, Math.floor(pageHeight * zoom))
+      pageWidth,
+      pageHeight
     };
-  }, [isPresentation, pageAspectRatio, presentationZoom, viewportSize.height, viewportSize.width]);
+  }, [isPresentation, pageAspectRatio, viewportSize.height, viewportSize.width]);
 
   const displayLabel = useMemo(() => {
     if (totalPages <= 0) {
@@ -649,22 +800,15 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
         event.preventDefault();
         bookRef.current?.pageFlip?.()?.flipPrev();
       }
-      const usesZoomModifier = event.ctrlKey || event.metaKey;
-      const isZoomInShortcut = usesZoomModifier && (event.code === "Equal" || event.code === "NumpadAdd");
-      const isZoomOutShortcut = usesZoomModifier && (event.code === "Minus" || event.code === "NumpadSubtract");
-      const isZoomResetShortcut = usesZoomModifier && (event.code === "Digit0" || event.code === "Numpad0");
 
-      if (isPresentation && isFlipbook && isZoomInShortcut) {
+      if (isPresentation && isFlipbook && event.key.toLowerCase() === "z") {
         event.preventDefault();
-        handleZoomIn();
+        handleLensToggle();
       }
-      if (isPresentation && isFlipbook && isZoomOutShortcut) {
+      if (event.key === "Escape" && isLensEnabled) {
         event.preventDefault();
-        handleZoomOut();
-      }
-      if (isPresentation && isFlipbook && isZoomResetShortcut) {
-        event.preventDefault();
-        handleZoomReset();
+        setIsLensEnabled(false);
+        return;
       }
       if (event.key === "Escape" && onBack) {
         event.preventDefault();
@@ -674,7 +818,52 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleZoomIn, handleZoomOut, handleZoomReset, isFlipbook, isPresentation, onBack, totalPages]);
+  }, [handleLensToggle, isFlipbook, isLensEnabled, isPresentation, onBack, totalPages]);
+
+  useEffect(() => {
+    if (!isLensEnabled) {
+      return;
+    }
+
+    let frame = window.requestAnimationFrame(syncLensClone);
+    const source = stageRef.current?.querySelector(".flipbook-root");
+
+    if (!(source instanceof HTMLElement)) {
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    const observer = new MutationObserver(() => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(syncLensClone);
+    });
+
+    observer.observe(source, {
+      attributes: true,
+      childList: true,
+      subtree: true
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [currentPageIndex, isLensEnabled, layout.pageHeight, layout.pageWidth, syncLensClone]);
+
+  useEffect(() => {
+    syncLensTransform();
+  }, [syncLensTransform]);
+
+  useEffect(() => {
+    if (!isLensEnabled || !stageRef.current) {
+      return;
+    }
+
+    const stage = stageRef.current;
+    const handleScroll = () => syncLensTransform();
+
+    stage.addEventListener("scroll", handleScroll, { passive: true });
+    return () => stage.removeEventListener("scroll", handleScroll);
+  }, [isLensEnabled, syncLensTransform]);
 
   return (
     <section className={`viewer-shell ${isPresentation ? "presentation-viewer" : ""}`}>
@@ -725,7 +914,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
 
       {!editor && isFlipbook && !loading && !error && renderablePages.length > 0 ? (
         <div className="flipbook-shell">
-          <div className="flipbook-stage">
+          <div ref={stageRef} className="flipbook-stage">
             <PageFlipBook
               ref={bookRef as never}
               className="flipbook-root"
@@ -748,6 +937,27 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
             >
               {flipbookChildren}
             </PageFlipBook>
+
+            {isPresentation && isLensEnabled ? (
+              <div
+                className="presentation-lens"
+                style={{ left: `${lensPosition.x}px`, top: `${lensPosition.y}px` }}
+                role="presentation"
+              >
+                <div
+                  ref={lensViewportRef}
+                  className="presentation-lens-viewport"
+                  onPointerDown={handleLensPointerDown}
+                  onPointerMove={handleLensPointerMove}
+                  onPointerUp={handleLensPointerRelease}
+                  onPointerCancel={handleLensPointerRelease}
+                >
+                  <div ref={lensContentRef} className="presentation-lens-content" aria-hidden="true" />
+                  <div className="presentation-lens-crosshair" aria-hidden="true" />
+                  <div className="presentation-lens-label">{PRESENTATION_LENS_ZOOM}x</div>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {isPresentation && currentPageIndex <= 0 ? (
@@ -756,21 +966,14 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
 
           {isPresentation ? (
             <div className="presentation-zoom-controls" aria-label="Zoom controls">
-              <button type="button" className="flipbook-btn presentation-zoom-btn" onClick={handleZoomOut} disabled={!canZoomOut}>
-                <Minus size={16} />
-                <span>Out</span>
-              </button>
               <button
                 type="button"
-                className="flipbook-btn presentation-zoom-value"
-                onClick={handleZoomReset}
-                aria-label="Reset zoom to 100%"
+                className={`flipbook-btn presentation-zoom-toggle ${isLensEnabled ? "active" : ""}`}
+                onClick={handleLensToggle}
+                aria-pressed={isLensEnabled}
               >
-                {Math.round(presentationZoom * 100)}%
-              </button>
-              <button type="button" className="flipbook-btn presentation-zoom-btn" onClick={handleZoomIn} disabled={!canZoomIn}>
-                <Plus size={16} />
-                <span>In</span>
+                <Search size={16} />
+                <span>{isLensEnabled ? "Hide zoom box" : "Show zoom box"}</span>
               </button>
             </div>
           ) : null}
