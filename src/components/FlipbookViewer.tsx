@@ -86,6 +86,10 @@ const getViewportSize = (): ViewportSize => ({
 const PAGE_FLIP_SAFETY_PADDING = 4;
 const PRESENTATION_LENS_ZOOM = 10;
 const DEFAULT_LENS_POSITION = { x: 180, y: 180 };
+const MOBILE_BREAKPOINT_WIDTH = 920;
+const LENS_INITIAL_X_DESKTOP = 0.75; // centre of right page in two-page landscape spread
+const LENS_INITIAL_X_MOBILE = 0.5;   // centre of single page in portrait mode
+const LENS_INITIAL_Y = 0.5;          // vertical centre of the flipbook
 
 const CoverPage = React.forwardRef<HTMLDivElement, CoverProps>(function CoverPage(
   { title, subtitle, isBack = false, coverImage },
@@ -390,6 +394,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
   const lensContentRef = useRef<HTMLDivElement | null>(null);
   const lensCloneRef = useRef<HTMLElement | null>(null);
   const lensPointerIdRef = useRef<number | null>(null);
+  const lensWasEnabledRef = useRef(false);
 
   const isPdf = book.contentKind === "pdf";
   const isMagazine = book.contentKind === "magazine";
@@ -629,10 +634,27 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
 
   useEffect(() => {
     if (!isLensEnabled) {
+      lensWasEnabledRef.current = false;
       lensCloneRef.current = null;
       lensPointerIdRef.current = null;
       lensContentRef.current?.replaceChildren();
       return;
+    }
+
+    if (!lensWasEnabledRef.current) {
+      lensWasEnabledRef.current = true;
+      const stageEl = stageRef.current;
+      const flipbookEl = stageEl?.querySelector(".flipbook-root:not(.presentation-lens-clone)") as HTMLElement | null;
+      if (stageEl && flipbookEl) {
+        const stageRect = stageEl.getBoundingClientRect();
+        const flipbookRect = flipbookEl.getBoundingClientRect();
+        const isMobile = viewportSize.width < MOBILE_BREAKPOINT_WIDTH;
+        setLensPosition(getConstrainedLensPosition({
+          x: flipbookRect.left - stageRect.left + flipbookRect.width * (isMobile ? LENS_INITIAL_X_MOBILE : LENS_INITIAL_X_DESKTOP),
+          y: flipbookRect.top - stageRect.top + flipbookRect.height * LENS_INITIAL_Y,
+        }));
+        return;
+      }
     }
 
     setLensPosition((current) => getConstrainedLensPosition(current));
@@ -718,7 +740,7 @@ export function FlipbookViewer({ book, onBack, onLoaded, variant = "dashboard", 
   }, [book.id, isFlipbook, isMagazine, magazinePages, onLoaded, pdfSources]);
 
   const layout = useMemo(() => {
-    const isMobile = viewportSize.width < 920;
+    const isMobile = viewportSize.width < MOBILE_BREAKPOINT_WIDTH;
     const horizontalPadding = isPresentation ? (viewportSize.width < 640 ? 0 : 64) : viewportSize.width < 768 ? 80 : 120;
     const verticalReserve = isPresentation ? (viewportSize.height < 720 ? 20 : 56) : viewportSize.height < 840 ? 340 : 270;
     const availableWidth = Math.max(200, viewportSize.width - horizontalPadding);
